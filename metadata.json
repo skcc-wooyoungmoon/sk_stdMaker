@@ -1,0 +1,5 @@
+{
+  "name": "Dev Guide & Framework Generator",
+  "description": "An application that generates a Spring Boot framework and development guidelines based on user-provided documents and conventions.",
+  "requestFramePermissions": []
+}
