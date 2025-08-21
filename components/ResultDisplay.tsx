@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import type { GenerationResult, FileWithPath, FileNode } from '../types';
 import { FileIcon } from './icons/FileIcon';
 import { FolderIcon } from './icons/FolderIcon';
@@ -83,6 +83,10 @@ const FileTreeItem: React.FC<{
 export const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
     const [activeTab, setActiveTab] = useState<'source' | 'guide'>('source');
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
+    const [sidebarWidth, setSidebarWidth] = useState(288); // Initial width for the file tree panel
+
+    const sidebarRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
 
     const fileTree = useMemo(() => buildFileTree(result.fileSystem), [result.fileSystem]);
     
@@ -107,6 +111,39 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
             setSelectedFile(findFirstFile(fileTree));
         }
     }, [fileTree, selectedFile]);
+
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+
+        if (!sidebarRef.current || !containerRef.current) return;
+
+        const startWidth = sidebarRef.current.getBoundingClientRect().width;
+        const startPosition = e.clientX;
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            const newWidth = startWidth + moveEvent.clientX - startPosition;
+            const containerWidth = containerRef.current?.clientWidth ?? window.innerWidth;
+            
+            const minWidth = 200;
+            const maxWidth = containerWidth - 300; // Keep at least 300px for the code view
+
+            if (newWidth >= minWidth && newWidth <= maxWidth) {
+                setSidebarWidth(newWidth);
+            }
+        };
+
+        const handleMouseUp = () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    }, []);
 
     const handleDownloadGuide = () => {
         const blob = new Blob([result.guideMd], { type: 'text/markdown;charset=utf-8' });
@@ -146,18 +183,29 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
             </div>
 
             {activeTab === 'source' ? (
-                <div className="grid grid-cols-1 md:grid-cols-12 h-[60vh] max-h-[700px]">
-                    <div className="md:col-span-4 lg:col-span-3 border-r border-slate-200 p-2 overflow-y-auto">
-                        <div className="space-y-1">
+                <div ref={containerRef} className="flex h-[60vh] max-h-[700px]">
+                    <div
+                        ref={sidebarRef}
+                        style={{ width: `${sidebarWidth}px` }}
+                        className="flex-shrink-0 border-r border-slate-200 overflow-y-auto"
+                    >
+                        <div className="p-2 space-y-1">
                             {fileTree.map(node => (
                                 <FileTreeItem key={node.path} node={node} selectedFile={selectedFile} onFileSelect={setSelectedFile} initiallyExpanded={true} />
                             ))}
                         </div>
                     </div>
-                    <div className="md:col-span-8 lg:col-span-9 flex flex-col overflow-hidden bg-slate-50">
+                    <div
+                        onMouseDown={handleMouseDown}
+                        className="w-1.5 flex-shrink-0 bg-slate-200 hover:bg-blue-500 active:bg-blue-600 transition-colors duration-200 cursor-col-resize"
+                        aria-label="Resize panel"
+                        role="separator"
+                        aria-orientation="vertical"
+                    />
+                    <div className="flex-grow flex flex-col overflow-hidden bg-slate-50 min-w-0">
                         {currentFileContent ? (
                             <>
-                                <div className="p-3 bg-slate-200 border-b border-slate-300 text-sm text-slate-700 font-mono flex-shrink-0">{selectedFile}</div>
+                                <div className="p-3 bg-slate-200 border-b border-slate-300 text-sm text-slate-700 font-mono flex-shrink-0 truncate" title={selectedFile ?? ''}>{selectedFile}</div>
                                 <div className="flex-grow overflow-auto">
                                     <pre className="p-4 text-sm h-full w-full text-slate-800"><code>{currentFileContent}</code></pre>
                                 </div>
